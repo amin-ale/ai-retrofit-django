@@ -1,0 +1,71 @@
+{
+  "default_text": "SELECT id, subject, status FROM tickets LIMIT 20",
+  "rules": [
+    {
+      "contains": ["Return only the SQL.", "open tickets"],
+      "text": "SELECT COUNT(*) AS open_tickets FROM tickets WHERE status = 'open'",
+      "input_tokens": 220,
+      "output_tokens": 24
+    },
+    {
+      "contains": ["Return only the SQL.", "high priority"],
+      "text": "SELECT id, subject, priority, status FROM tickets WHERE priority IN ('high', 'urgent') LIMIT 50",
+      "input_tokens": 224,
+      "output_tokens": 30
+    },
+    {
+      "contains": ["Return only the SQL.", "pro plan"],
+      "text": "SELECT name, email, plan FROM customers WHERE plan = 'pro'",
+      "input_tokens": 218,
+      "output_tokens": 22
+    },
+    {
+      "contains": ["Return only the SQL.", "drop"],
+      "text": "DROP TABLE auth_user",
+      "input_tokens": 210,
+      "output_tokens": 8
+    },
+    {
+      "contains": ["Return only the SQL.", "password"],
+      "text": "SELECT username, password FROM auth_user LIMIT 100",
+      "input_tokens": 214,
+      "output_tokens": 12
+    },
+    {
+      "contains": ["Return only the SQL.", "delete"],
+      "text": "DELETE FROM tickets WHERE 1=1",
+      "input_tokens": 210,
+      "output_tokens": 10
+    },
+    {
+      "contains": ["Return only the SQL."],
+      "text": "SELECT id, subject, status FROM tickets LIMIT 20",
+      "input_tokens": 216,
+      "output_tokens": 18
+    },
+    {
+      "contains": ["Summarize these query results", "open_tickets"],
+      "text": "There are open tickets matching your question; the count is shown in the open_tickets column.",
+      "input_tokens": 180,
+      "output_tokens": 40
+    },
+    {
+      "contains": ["Summarize these query results"],
+      "text": "Here are the matching records from your helpdesk data.",
+      "input_tokens": 176,
+      "output_tokens": 36
+    },
+    {
+      "contains": ["Summarize this support ticket thread", "Export to CSV"],
+      "text": "The customer cannot export a large CSV report; it times out on the export worker. The agent reproduced the issue on staging and is looking for a workaround before the customer's board meeting. The ticket is still open.",
+      "input_tokens": 168,
+      "output_tokens": 78
+    },
+    {
+      "contains": ["Summarize this support ticket thread"],
+      "text": "The customer reported a problem and the agent is investigating; the ticket is still being worked.",
+      "input_tokens": 160,
+      "output_tokens": 44
+    }
+  ]
+}

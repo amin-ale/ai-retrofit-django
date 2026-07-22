@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install project
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run tests (offline)
+        run: pytest -q
+
+      - name: End-to-end offline demo path
+        run: |
+          python manage.py migrate --noinput
+          python manage.py seed_demo
+          python manage.py copilot_seed_embeddings
+          python scripts/generate_cost_table.py
+          test -f docs/COST-TABLE.md
+          python manage.py copilot_cost_report
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax-check the copilot panel
+        run: node --check copilot/static/copilot/panel.js

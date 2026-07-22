@@ -1,0 +1,67 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helpdesk AI Copilot</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; max-width: 820px; }
+    h1 { font-size: 1.3rem; }
+    fieldset { border: 1px solid #8884; border-radius: 8px; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.8rem; opacity: 0.75; margin-bottom: 0.2rem; }
+    input, textarea, button, select { font: inherit; padding: 0.5rem; border-radius: 6px; border: 1px solid #8886; width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; width: auto; margin-top: 0.5rem; }
+    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 140px; }
+    pre { background: #8881; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; word-break: break-word; min-height: 1.5rem; }
+    code { background: #8881; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .muted { opacity: 0.7; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Helpdesk AI Copilot <span class="muted">(retrofit demo)</span></h1>
+  <p class="muted">In production the tenant is bound to the authenticated session. This demo takes it as a field because the sample host app ships without login.</p>
+
+  <div class="row">
+    <div>
+      <label for="tenant">Tenant id</label>
+      <input id="tenant" value="1">
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <input id="status" value="-" readonly>
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Semantic search</legend>
+    <label for="search-q">Search tickets</label>
+    <input id="search-q" placeholder="duplicate billing charge refund">
+    <button data-action="search">Search</button>
+    <pre id="search-out"></pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Ask your data</legend>
+    <label for="ask-q">Question</label>
+    <input id="ask-q" placeholder="How many open tickets are there?">
+    <button data-action="ask">Ask</button>
+    <p class="muted">Generated SQL is validated by the guardrail and run read-only, tenant-scoped.</p>
+    <div><label>SQL</label><pre id="ask-sql"></pre></div>
+    <div><label>Rows</label><pre id="ask-rows"></pre></div>
+    <div><label>Answer</label><pre id="ask-answer"></pre></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Summarize a ticket</legend>
+    <label for="sum-id">Ticket id</label>
+    <input id="sum-id" placeholder="1">
+    <button data-action="summarize">Summarize</button>
+    <pre id="sum-out"></pre>
+  </fieldset>
+
+  <script src="{% static 'copilot/panel.js' %}"></script>
+</body>
+</html>

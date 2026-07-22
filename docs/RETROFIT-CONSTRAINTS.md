@@ -1,0 +1,103 @@
+# Retrofitting an AI copilot into an app you can't rewrite
+
+Greenfield AI demos start from an empty database and no users. A retrofit starts from
+the opposite place: a product that already has a schema, an auth model, paying tenants,
+and a support team who will notice the moment something regresses. Every design choice in
+this repo is driven by a constraint that a greenfield build never has to face. This is the
+write-up of those constraints and how the copilot is built around them.
+
+## The host product
+
+`helpdesk/` is a small but real multi-tenant Django helpdesk: tenants, customers, tickets,
+and ticket messages, with the standard `django.contrib.auth` user table. Treat it as a
+stand-in for "your existing product." The copilot lives entirely in `copilot/` and is written
+so it drops into a host app the same way here as it would into a real one: it never edits the
+host's models, migrations, or routes.
+
+## Constraint 1: zero schema breakage
+
+The host's tables are load-bearing and backed up; a retrofit that alters them is a retrofit
+that can corrupt or lock them. So the copilot **only ever adds tables**, all prefixed
+`copilot_`, and its migration has **no dependency on the host app's migrations at all**
+(`copilot/migrations/0001_initial.py` has an empty `dependencies` list). It references the
+host by integer id (`tenant_id`, `source_table`, `source_pk`), not by `ForeignKey`, so there
+is no migration-graph coupling and no cascade surprise. Three tests in
+`tests/test_migration_safety.py` enforce this mechanically: every copilot operation is a
+`CreateModel` on a `copilot_`-prefixed table, none touch `helpdesk_` tables, and none depend
+on the host. See [MIGRATION-PLAN.md](MIGRATION-PLAN.md) for the rollout and rollback steps.
+
+## Constraint 2: the existing auth and tenant boundary is the security boundary
+
+The copilot must not become a way to read across the tenant boundary the host already
+enforces. Two independent mechanisms guarantee this for "ask your data":
+
+1. **Tenant-scoped temporary views.** The generated SQL never sees base tables. Before each
+   query, `sql_executor.execute_scoped` creates `TEMP VIEW`s (`tickets`, `customers`,
+   `ticket_messages`) filtered to the caller's `tenant_id`, which is taken server-side from
+   the request context, never from the model output. The model can only name those views.
+2. **Engine-level read-only.** The same connection runs `PRAGMA query_only = ON` before the
+   query executes, so even a guard bug cannot produce a write.
+   `tests/test_sql_executor.py::test_engine_level_read_only_blocks_writes` proves a `CREATE
+   TABLE` is rejected by the engine.
+
+`auth_user` and every `helpdesk_`-prefixed table are simply not in the view allowlist, so a
+question like "show me every password" produces SQL the guardrail rejects before execution.
+
+## Constraint 3: the model is untrusted input
+
+Any SQL the model emits is treated like a string from the internet.
+`copilot/services/sql_guard.py` enforces, before anything reaches the database:
+
+- exactly one statement, and it must be a `SELECT`;
+- no DDL/DML keywords, no `PRAGMA`, no `ATTACH`, no comments, no `UNION`/`EXCEPT`/`INTERSECT`;
+- every table named must be in the view allowlist;
+- a `LIMIT` is present (injected if missing, clamped if too large).
+
+`tests/test_sql_guard.py` covers a dozen attack strings. The guardrail is the on-screen answer
+to the buyer's real fear: "you're going to let an LLM write SQL against my production database?"
+
+## Constraint 4: data boundaries and PII
+
+Support tickets contain customer PII. `copilot/services/redaction.py` strips emails, card
+numbers, SSNs, and phone numbers **before** any text is put in a prompt, and query results are
+redacted before they are summarized. The eval gate asserts that a question containing an email
+never sends the raw address to the provider (`tests/test_eval_gate.py`, the
+`pii_is_redacted_before_send` case). Redaction is conservative pattern-matching, not a
+compliance guarantee. See the legal note in the README.
+
+## Constraint 5: you cannot ship it to everyone at once
+
+A retrofit rolls out behind a flag, per tenant, so it can be enabled for a pilot and killed
+instantly. `copilot/services/flags.py` resolves a global kill-switch (`COPILOT_ENABLED`) and a
+per-tenant `CopilotTenantConfig.enabled`; a disabled tenant gets a `404`, not a broken UI.
+
+## Constraint 6: someone else pays the model bill
+
+An open-ended LLM feature is an open-ended invoice. Every tenant has a daily token budget
+(`copilot/services/budget.py`); once spent, the copilot returns `429` with the limit instead
+of calling the model. Identical redacted requests are served from `copilot_response_cache`
+rather than re-billed. Every call is logged to `copilot_usage_log`, and
+`copilot_cost_report` turns those logs into reproducible dollar figures. The before/after
+caching table in [COST-TABLE.md](COST-TABLE.md) is generated by
+`scripts/generate_cost_table.py` from recorded token counts, not hand-waved.
+
+## Constraint 7: a prompt change must not silently degrade quality
+
+On a live product you cannot find out in production that last week's prompt tweak broke SQL
+generation. The eval set in `tests/fixtures/eval_cases.json` runs in CI as a regression gate:
+expected SQL shape for known questions, guardrail rejection for known attacks, and PII
+redaction, all asserted on every push. A change that regresses any of them fails the build.
+
+## What I'd do differently at real scale
+
+- Swap the hashing embedder for a hosted embeddings model (Voyage/OpenAI) and store vectors in
+  `pgvector` instead of scanning rows in Python; the `EmbeddingClient` interface already isolates
+  this.
+- Run "ask your data" against a dedicated read-replica with a read-only database role, so the
+  read-only guarantee is enforced by the database grants, not just `PRAGMA query_only`.
+- Move budget accounting to a reservation model (reserve-then-settle) to remove the small
+  over-budget window the current check-then-record approach allows.
+- Add per-tenant prompt/response retention windows and a scrubbing job for the usage log.
+
+This is a point-in-time engineering reference, not a security audit or a guarantee about any
+particular deployment.
