@@ -21,19 +21,21 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install project
-        run: uv pip install --system -e ".[dev]"
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e ".[dev]"
 
       - name: Run tests (offline)
-        run: pytest -q
+        run: uv run pytest -q
 
       - name: End-to-end offline demo path
         run: |
-          python manage.py migrate --noinput
-          python manage.py seed_demo
-          python manage.py copilot_seed_embeddings
-          python scripts/generate_cost_table.py
+          uv run python manage.py migrate --noinput
+          uv run python manage.py seed_demo
+          uv run python manage.py copilot_seed_embeddings
+          uv run python scripts/generate_cost_table.py
           test -f docs/COST-TABLE.md
-          python manage.py copilot_cost_report
+          uv run python manage.py copilot_cost_report
 
   frontend-check:
     runs-on: ubuntu-latest
